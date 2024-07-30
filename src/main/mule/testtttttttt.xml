@@ -9,6 +9,6 @@ http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/htt
 	</http:listener-config>
 	<flow name="testttttttttFlow" doc:id="238b2000-6a1b-44b1-857e-633a8871124f" >
 		<http:listener doc:name="Listener" doc:id="480d9604-1ee1-4fad-abba-c4f88c5108e9" config-ref="HTTP_Listener_config" path="/apa"/>
-		<set-payload value="#[tettststststs]" doc:name="Set Payload" doc:id="9905832e-1b3c-4230-92aa-66aeb45fe631" />
+		<set-payload value="#[aaaaaaqwerty]" doc:name="Set Payload" doc:id="9905832e-1b3c-4230-92aa-66aeb45fe631" />
 	</flow>
 </mule>
