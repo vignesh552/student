@@ -1,0 +1,361 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:apikit="http://www.mulesoft.org/schema/mule/mule-apikit" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd http://www.mulesoft.org/schema/mule/mule-apikit http://www.mulesoft.org/schema/mule/mule-apikit/current/mule-apikit.xsd http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd 
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+    
+    
+	<os:config name="ObjectStore_Config" doc:name="ObjectStore Config" doc:id="e7e577c7-6950-4fc8-bec3-c810212647e3" >
+		<os:connection />
+	</os:config>
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="6b7bef4a-fe38-4fb3-bbb0-42d08c761a67" maxEntries="10" expirationInterval="10" config-ref="ObjectStore_Config" />
+	<flow name="student-register-form-main">
+        <http:listener config-ref="student-register-form-httpListenerConfig" path="/api/*">
+            <http:response statusCode="#[vars.httpStatus default 200]">
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:response>
+            <http:error-response statusCode="#[vars.httpStatus default 500]">
+                <http:body>#[payload]</http:body>
+                <http:headers>#[vars.outboundHeaders default {}]</http:headers>
+            </http:error-response>
+        </http:listener>
+        <apikit:router config-ref="student-register-form-config" />
+        <error-handler ref="global.error_handlerError_Handler">
+        </error-handler>
+    </flow>
+    <flow name="put:\register\(studentId):application\json:student-register-form-config">
+        <logger level="INFO" doc:name="Logger before updating the password" doc:id="4bc2fd6a-9e3c-472c-a1a3-022624eceb51" message="Logger before updating the password"/>
+		<ee:transform doc:name="Transform Message">
+            <ee:variables>
+                <ee:set-variable variableName="studentId">attributes.uriParams.'studentId'</ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="d0449441-8fc0-4f9d-9034-b8bed965d721" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="vars" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes.headers.token]]></ee:set-variable>
+				<ee:set-variable variableName="payloadPassword" ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<os:retrieve doc:name="Retrieve" doc:id="4c0aed34-52ce-4bdf-9611-fc3a1c973564" key='#["token"]' objectStore="Object_store" />
+		<choice doc:name="Choice" doc:id="71d9b3be-95f3-4624-896f-6cc99ea3bcee" >
+			<when expression="#[vars.vars == payload.token]">
+				<db:select doc:name="Select" doc:id="d5a7d2ad-0971-4204-aa8e-88e4dc43ce08" config-ref="Database_Config">
+			<db:sql><![CDATA[SELECT * FROM registerform WHERE password= :password AND  studentId=: studentId;]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+	"studentId": vars.studentId ,
+	"password": vars.payloadPassword."Old-Password"
+}]]]></db:input-parameters>
+		</db:select>
+				<choice doc:name="Choice" doc:id="0ab860b0-4f61-4ae5-8772-2bb5449f1b8a">
+			<when expression='#[vars.payloadPassword."Old-Password" == payload[0]."password"]'>
+						<ee:transform doc:name="Transform Message" doc:id="26f916e1-925e-42c8-8133-33e805b04f61">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+ vars.payloadPassword."New-Password"]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+						<db:update doc:name="Update" doc:id="1fce43d0-abdd-4615-bc76-6ff56d2dc4dd" config-ref="Database_Config">
+					<db:sql><![CDATA[UPDATE registerform
+SET "password"= :password WHERE studentid= :studentid;]]></db:sql>
+					<db:input-parameters><![CDATA[#[{
+	"password": payload,
+	"studentid" : vars.studentId
+}]]]></db:input-parameters>
+				</db:update>
+				<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  UpdateStudentexample: {
+    message: "the password has been updated"
+  }
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+						<logger level="INFO" doc:name="Logger after updating the password" doc:id="91012afd-809b-44c3-a970-b2f84ceac3a7" message="Logger after updating the password" />
+			</when>
+			<otherwise>
+				<ee:transform doc:name="Transform Message" doc:id="0089180e-4d2e-47c3-ad88-43f16259af1f">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "There is an error the old password is incorrect"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="3d3401ec-4449-4deb-a141-d150aeaf8602" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+"message" : "there is a invalid in the token"]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+    </flow>
+    <flow name="delete:\register\(studentId):student-register-form-config">
+        <logger level="INFO" doc:name="logger before delete" doc:id="3f6ffe79-c947-40df-8e50-491802b00486" message="logger before delete"/>
+		<ee:transform doc:name="Transform Message">
+            <ee:variables>
+                <ee:set-variable variableName="studentId">attributes.uriParams.'studentId'</ee:set-variable>
+            </ee:variables>
+        </ee:transform>
+		<ee:transform doc:name="Transform Message" doc:id="005b30ce-860d-4b13-a6d1-f05ba1b7fc6e" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="variable" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes.headers.token]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<os:retrieve doc:name="Retrieve" doc:id="75e89ac1-c9fd-4fda-948d-cb7c3a51142b" key='#["token"]' objectStore="Object_store" />
+		<choice doc:name="Choice" doc:id="523607ea-3ff8-4696-abba-59d66eed55b6" >
+			<when expression="#[vars.variable == payload.token]">
+				<ee:transform doc:name="Transform Message" doc:id="f4d14c63-dae9-4627-bd3c-1597ce8c685c">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.studentid]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<db:delete doc:name="Delete" doc:id="551be718-79eb-4575-bf48-7e68a9260543" config-ref="Database_Config">
+			<db:sql><![CDATA[DELETE FROM registerform WHERE studentid= :studentid]]></db:sql>
+			<db:input-parameters><![CDATA[#[{
+	"studentid": vars.studentId
+}]]]></db:input-parameters>
+		</db:delete>
+				<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  DeleteStudentexample: {
+    message: "The student details has been deleted"
+  }
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+				<logger level="INFO" doc:name="logger after delete" doc:id="a426464c-13d6-465b-987c-c047f853f71d" message="logger after delete" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="c9dd6abd-7c7d-492f-b7f9-11aeb13ca4f5" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+    </flow>
+    <flow name="get:\register:student-register-form-config">
+		<logger level="INFO" doc:name="logger before getting all users" doc:id="8d36526f-3923-4815-85a4-8968ccfbcac0" message="logger before getting all users" />
+		<ee:transform doc:name="Transform Message" doc:id="8cf688c3-306c-479a-81ac-15091eee4600" >
+			<ee:message >
+			</ee:message>
+			<ee:variables >
+				<ee:set-variable variableName="head" ><![CDATA[%dw 2.0
+output application/json
+---
+attributes.headers.token]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<os:retrieve doc:name="Retrieve" doc:id="c849ad48-9a0d-4e23-a7b6-b8d60f73ff3c" key='#["token"]' objectStore="Object_store" >
+			<os:default-value ><![CDATA[#["1"]]]></os:default-value>
+		</os:retrieve>
+		<choice doc:name="Choice" doc:id="6cefa154-68f8-42bd-8633-b50d220a2bf6" >
+			<when expression="#[vars.head == payload.token]">
+				<db:select doc:name="Select" doc:id="7303e24b-d3a5-45b0-b375-c450a871e29b" config-ref="Database_Config">
+			<db:sql><![CDATA[Select * from registerform;]]></db:sql>
+		</db:select>
+				<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+				<logger level="INFO" doc:name="logger after getting all users" doc:id="145b977a-8bfd-4cea-8999-b306f90a5103" message="logger after getting all users" />
+				<ee:transform doc:name="Transform Message" doc:id="8389c7b6-3272-4f9c-b3d7-2207f5cda785">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+			</when>
+			<otherwise >
+				<set-payload value="Given token is invalid" doc:name="Set Payload" doc:id="a8d609cb-8a67-4527-8c52-e570b5fc83c4" />
+			</otherwise>
+		</choice>
+    </flow>
+    <flow name="post:\register:application\json:student-register-form-config">
+		<logger level="INFO" doc:name="Logger before registering" doc:id="1fc4bff0-f9c3-4f6f-8cd8-70aa680d0b16" message="Logger before registering"/>
+		<ee:transform doc:name="Transform Message" doc:id="217fb1fd-83bd-4a0b-b016-cd3d2d3ddeed">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="variable"><![CDATA[%dw 2.0
+output application/json
+---
+attributes.headers.token]]></ee:set-variable>
+				<ee:set-variable variableName="registerPayload" ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<os:retrieve doc:name="Retrieve" doc:id="dbf0e075-fc2d-4532-912f-8dfacc145a4d" key='#["token"]' objectStore="Object_store">
+			<os:default-value><![CDATA[#["1"]]]></os:default-value>
+		</os:retrieve>
+		<choice doc:name="Choice" doc:id="085bb423-e36e-4b53-aa16-5edb745fcaa2" >
+			<when expression="#[vars.variable == payload.token]">
+				<ee:transform doc:name="Transform Message" doc:id="4a2ae855-a232-44c1-a4d7-b3396576db77">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.registerPayload]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<ee:transform doc:name="Transform Message" doc:id="43818b9f-2c62-4d94-922e-05730c220b1f">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	studentid: payload.Studentid,
+	name: payload.Name,
+	age: payload.Age,
+	email: payload.Email,
+	password: payload.Password
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+				<db:insert doc:name="Insert" doc:id="3659ee47-afc7-4611-8d0d-361653474a58" config-ref="Database_Config">
+			<db:sql><![CDATA[INSERT INTO registerform
+(studentid, name, age, email, password)
+VALUES(:studentid, :name, :age, :email, :password);]]></db:sql>
+			<db:input-parameters><![CDATA[#[payload]]]></db:input-parameters>
+		</db:insert>
+				<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+
+{
+    message: "The student details has been registered successfully "  
+}
+]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+				<logger level="INFO" doc:name="Logger after registering" doc:id="20611bca-8e41-432f-8d5c-be50a66a3386" message="Logger after registering" />
+			</when>
+			<otherwise >
+				<ee:transform doc:name="Transform Message" doc:id="aa5eeaf3-0f18-45e3-bda5-28d7935de46f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message" : "there is a invalid token"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+    </flow>
+    <flow name="post:\login:application\json:student-register-form-config">
+        <logger level="INFO" doc:name="Logger before login" doc:id="a0800737-e513-467a-b7d8-d353cf1e3199" message="Logger before login"/>
+		<ee:transform doc:name="Transform Message" doc:id="370776ee-923a-49dc-af67-f641bb520683" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:select doc:name="Select" doc:id="771014e0-5e55-484d-9df4-a820b0c16269" config-ref="Database_Config">
+			<db:sql ><![CDATA[SELECT * FROM registerform WHERE email= :email AND password= :password;]]></db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	"email": payload.Email,
+	"password": payload.Password
+}]]]></db:input-parameters>
+		</db:select>
+		<choice doc:name="Choice" doc:id="28d3c8a9-f5ef-4b20-9a92-419a4a91eea9" >
+			<when expression="#[sizeOf(payload)&gt;0]">
+				<ee:transform doc:name="Transform Message">
+            <ee:message>
+                <ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+  Loginstudentexample: {
+    message: "The student has been logged in successfully"
+  }
+} as Object {encoding: "UTF-8", mediaType: "application/json"}]]></ee:set-payload>
+            </ee:message>
+        </ee:transform>
+			</when>
+			<otherwise>
+				<ee:transform doc:name="Transform Message" doc:id="906746c1-a54e-40e6-9950-0dbc2880737e">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "There is a no login credientials found"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+			</otherwise>
+		</choice>
+		<ee:transform doc:name="Transform Message" doc:id="b4863c40-acfa-442a-a9db-8256df3e7bec" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<set-variable value='#["token" : uuid()]' doc:name="Set Variable" doc:id="0a296c18-6ac5-4ff0-b21b-c1679d5cadec" variableName="value" />
+		<os:store doc:name="Store" doc:id="3fb25518-4750-4b52-989a-545cb675d653" key='#["token"]' objectStore="Object_store">
+			<os:value><![CDATA[#[vars.value]]]></os:value>
+		</os:store>
+		<ee:transform doc:name="Transform Message" doc:id="594270e1-98a6-4c66-9dd9-3ba9bb9ce9ba">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+vars.value  ]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger after login" doc:id="6ac84139-180f-4979-9db8-ad6a2231c60f" message="Logger after login"/>
+    </flow>
+</mule>

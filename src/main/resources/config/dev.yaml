@@ -1,0 +1,9 @@
+https:
+   host : "0.0.0.0"
+   port : "8081"
+   
+database:
+ URL : "jdbc:postgresql://155.133.26.236:5432/vigneshwar_trainee"
+ Driverclassname : "org.postgresql.Driver"
+ User : "![R4eymVKb7/AR76N6TS8McrZlOXLclPr7]"
+ Password : "![DUiIyTwrHzbZSsert23ppQ==]"
